@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import randint
+import csv
 
 from sklearn.preprocessing import OrdinalEncoder
 
@@ -54,10 +55,13 @@ def custom_compare_models(df):
 
 
 # Takes a dataframe with all x values, but y values with labels only
+# Print comparison to a csv file
 def compare_classification_models(df, variations):
+
+    file_path = 'classification.csv'
+
     # Evaluate if the data is balanced or imbalanced
     balanced = is_balanced(df["SEVERITY_LABEL"])
-    # Scaling?
     
     # Splitting into train set and test set
     split = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)  # Provides train/test indices to split data in train/test sets.
@@ -72,6 +76,15 @@ def compare_classification_models(df, variations):
     ######### K-Nearest Neighbours #########
     knn_balanced_headers = ['k', 'Independent Variable Type', 'Accuracy']
     knn_imbalanced_headers = ['k', 'Independent Variable Type', 'Recall', 'Precision', 'F1-Score']
+    
+    # Write to csv
+    with open(file_path, 'a') as file:
+        file.write("K-Nearest Neighbours\n")
+        if balanced:
+            file.write(','.join(knn_balanced_headers))
+        else:
+            file.write(','.join(knn_imbalanced_headers))
+        file.write("\n")
 
     knn = KNeighborsClassifier()
 
@@ -80,22 +93,39 @@ def compare_classification_models(df, variations):
         knn = KNeighborsClassifier(n_neighbors=k)
         # for each variation
         for i in range(0, 3):
-            print(variations[i]['name'])
+            print(variations[i]['name']) # debug
             X_cols = train_X.copy()[variations[i]['columns']]
             knn.fit(X_cols, train_Y)
             pred_y_knn = knn.predict(test_X)
             if balanced:
                 accuracy_knn = balanced_evaluate(test_Y, pred_y_knn)
+                
                 # write to csv
+                with open(file_path, 'a') as file:
+                    file.write(','.join([k, variations[i]['name'], accuracy_knn]))
+                    file.write("\n")
             else:
                 recall_knn, precision_knn, f1_knn = imbalanced_evaluate(test_Y, pred_y_knn)
+                
                 # write to csv
+                with open(file_path, 'a') as file:
+                    file.write(','.join([k, variations[i]['name'], recall_knn, precision_knn, f1_knn]))
+                    file.write("\n")
 
     # if accuracy varies a lot between different n_neighbors=k values then the model is not robust
 
-    ######### Decision Tree #########
+    ######### Decision Tree Classification #########
     dt_balanced_headers = ['Independent Variable Type', 'Accuracy']
     dt_imbalanced_headers = ['Independent Variable Type', 'Recall', 'Precision', 'F1-Score']
+
+    # Write to csv
+    with open(file_path, 'a') as file:
+        file.write("Decision Tree Classification\n")
+        if balanced:
+            file.write(','.join(dt_balanced_headers))
+        else:
+            file.write(','.join(dt_imbalanced_headers))
+        file.write("\n")
 
     train_Y = OrdinalEncoder().fit_transform(train_Y) # encoding is required for non-numerical data
     dt = DecisionTreeClassifier(criterion='entropy')  # we specify entropy for IG
@@ -107,10 +137,18 @@ def compare_classification_models(df, variations):
         pred_y_dt = dt.predict(test_X) # may need to encode/decode since we encoded train_Y?
         if balanced:
             accuracy_dt = balanced_evaluate(test_Y, pred_y_dt)
+
             # write to csv
+            with open(file_path, 'a') as file:
+                file.write(','.join([variations[i]['name'], accuracy_dt]))
+                file.write("\n")
         else:
             recall_dt, precision_dt, f1_dt = imbalanced_evaluate(test_Y, pred_y_dt)
+
             # write to csv
+            with open(file_path, 'a') as file:
+                file.write(','.join([variations[i]['name'], recall_dt, precision_dt, f1_dt]))
+                file.write("\n")
 
 def is_balanced(col):
     max_diff = 0.05
@@ -133,6 +171,9 @@ def imbalanced_evaluate(test_Y, pred_y):
 
 # Takes a dataframe with all x values, but numerical y values only
 def compare_regression_models(df, variations):
+    
+    file_path = 'regression.csv'
+    
     train_X = df.drop("SEVERITY", axis=1) # !reminder, classification and regression models take different SEVERITY colums
     train_Y = df["SEVERITY"].copy()
 
