@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import randint
 
+from sklearn.preprocessing import OrdinalEncoder
+
 from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import cross_val_score
@@ -12,10 +14,12 @@ from sklearn.metrics import accuracy_score, recall_score, precision_score, f1_sc
 from sklearn.metrics import make_scorer
 
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.tree import DecisionTreeClassifier
 
 from sklearn.linear_model import LinearRegression
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import RandomForestRegressor
+
 from sklearn.model_selection import RandomizedSearchCV
 
 # print the table that we want to a .csv file
@@ -141,12 +145,23 @@ def compare_classification_models(df, variations):
             print(variations[i]['name'])
             X_cols = train_X.copy()[variations[i]['columns']]
             knn.fit(X_cols, train_Y)
-            pred_y = knn.predict(test_X)
-            recall = round(recall_score(test_Y, pred_y, average='weighted'),2)
-            precidion = round(precision_score(test_Y, pred_y, average='weighted'),2)
-            f1 = round(f1_score(test_Y, pred_y,average='weighted'),2)
+            pred_y_knn = knn.predict(test_X)
+            recall_knn = round(recall_score(test_Y, pred_y_knn, average='weighted'),2)
+            precidion_knn = round(precision_score(test_Y, pred_y_knn, average='weighted'),2)
+            f1_knn = round(f1_score(test_Y, pred_y_knn,average='weighted'),2)
 
     # if accuracy varies a lot between different n_neighbors=k values then the model is not robust
 
     ######### Decision Tree #########
-    
+    train_Y = OrdinalEncoder().fit_transform(train_Y) # encoding is required for non-numerical data
+    dt = DecisionTreeClassifier(criterion='entropy')  # we specify entropy for IG
+    # for each variation
+    for i in range(0, 3):
+        print(variations[i]['name'])
+        X_cols = train_X.copy()[variations[i]['columns']]
+        dt.fit(X_cols, train_Y)
+        pred_y_dt = dt.predict(test_X)
+        recall_dt = round(recall_score(test_Y, pred_y_dt, average='weighted'),2)
+        precidion_dt = round(precision_score(test_Y, pred_y_dt, average='weighted'),2)
+        f1_dt = round(f1_score(test_Y, pred_y_dt,average='weighted'),2)
+
