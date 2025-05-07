@@ -120,6 +120,7 @@ def custom_compare_models(df):
 # Takes a dataframe with all x values, but y values with labels only
 def compare_classification_models(df, variations):
     # Evaluate if the data is balanced or imbalanced
+    balanced = is_balanced(df["SEVERITY_LABEL"])
     # Scaling?
     
     # Splitting into train set and test set
@@ -132,9 +133,10 @@ def compare_classification_models(df, variations):
     test_X = test_set.drop("SEVERITY_LABEL", axis=1)
     test_Y = test_set["SEVERITY_LABEL"].copy()
 
-    headers = ['k', 'Independent Variable Type', 'Recall', 'Precision', 'F1-Score']
-    
     ######### K-Nearest Neighbours #########
+    knn_balanced_headers = ['k', 'Independent Variable Type', 'Accuracy']
+    knn_imbalanced_headers = ['k', 'Independent Variable Type', 'Recall', 'Precision', 'F1-Score']
+
     knn = KNeighborsClassifier()
 
     # Fine tune the n_neighbors=k hyperparameter    
@@ -146,13 +148,19 @@ def compare_classification_models(df, variations):
             X_cols = train_X.copy()[variations[i]['columns']]
             knn.fit(X_cols, train_Y)
             pred_y_knn = knn.predict(test_X)
-            recall_knn = round(recall_score(test_Y, pred_y_knn, average='weighted'),2)
-            precidion_knn = round(precision_score(test_Y, pred_y_knn, average='weighted'),2)
-            f1_knn = round(f1_score(test_Y, pred_y_knn,average='weighted'),2)
+            if balanced:
+                accuracy_knn = balanced_evaluate(test_Y, pred_y_knn)
+                # write to csv
+            else:
+                recall_knn, precision_knn, f1_knn = imbalanced_evaluate(test_Y, pred_y_knn)
+                # write to csv
 
     # if accuracy varies a lot between different n_neighbors=k values then the model is not robust
 
     ######### Decision Tree #########
+    dt_balanced_headers = ['Independent Variable Type', 'Accuracy']
+    dt_imbalanced_headers = ['Independent Variable Type', 'Recall', 'Precision', 'F1-Score']
+
     train_Y = OrdinalEncoder().fit_transform(train_Y) # encoding is required for non-numerical data
     dt = DecisionTreeClassifier(criterion='entropy')  # we specify entropy for IG
     # for each variation
@@ -160,8 +168,29 @@ def compare_classification_models(df, variations):
         print(variations[i]['name'])
         X_cols = train_X.copy()[variations[i]['columns']]
         dt.fit(X_cols, train_Y)
-        pred_y_dt = dt.predict(test_X)
-        recall_dt = round(recall_score(test_Y, pred_y_dt, average='weighted'),2)
-        precidion_dt = round(precision_score(test_Y, pred_y_dt, average='weighted'),2)
-        f1_dt = round(f1_score(test_Y, pred_y_dt,average='weighted'),2)
+        pred_y_dt = dt.predict(test_X) # may need to encode/decode since we encoded train_Y?
+        if balanced:
+            accuracy_dt = balanced_evaluate(test_Y, pred_y_dt)
+            # write to csv
+        else:
+            recall_dt, precision_dt, f1_dt = imbalanced_evaluate(test_Y, pred_y_dt)
+            # write to csv
 
+def is_balanced(col):
+    max_diff = 0.05
+    col.value_counts(normalize=True) # normalize=True to get the frequency
+    for indx1 in col.index:
+        for indx2 in col.index:
+            diff = abs(col[indx1] - col[indx2])
+            if diff > max_diff:
+                return True
+    return False
+
+def balanced_evaluate(test_Y, pred_y):
+    return round(accuracy_score(test_Y, pred_y), 2)
+
+def imbalanced_evaluate(test_Y, pred_y):
+    recall_dt = round(recall_score(test_Y, pred_y, average='weighted'),2)
+    precidion_dt = round(precision_score(test_Y, pred_y, average='weighted'),2)
+    f1_dt = round(f1_score(test_Y, pred_y,average='weighted'),2)
+    return recall_dt, precidion_dt, f1_dt
