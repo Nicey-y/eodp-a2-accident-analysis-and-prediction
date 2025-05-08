@@ -1,6 +1,11 @@
 import pandas as pd
 import numpy as np
 from collections import defaultdict
+import matplotlib.pyplot as plt
+import seaborn as sns
+import sklearn
+from sklearn.preprocessing import MinMaxScaler
+import random
 
 accident = pd.read_csv("accident.csv")
 # vehicle = pd.read_csv("vehicle.csv", nrows=10000)
@@ -26,10 +31,10 @@ person_df = pd.DataFrame({'ACCIDENT_NO': accident['ACCIDENT_NO']})
 # SEATING POSITION
 # change acc to seating score
 def seating_position_transform(pos):
-    if pos in ['D', 'CF', 'LF', 'PL']:
+    if pos == 'D':
+        return 2
+    elif pos in ['CF', 'LF', 'PL', 'CR', 'LR', 'PS', 'RR', 'OR']:
         return 1
-    elif pos in ['CR', 'LR', 'PS', 'RR', 'OR']:
-        return 0
     else:
         return -1
     
@@ -84,9 +89,9 @@ accident_df['SEVERITY'] = accident['SEVERITY']
 
 def speed_zone_transform(zone):
     if zone == 777:
-        return 150
+        return random.choice([10,20])
     elif zone == 888:
-        return 0
+        return 10
     elif zone == 999:
         return -1
     else:
@@ -116,12 +121,14 @@ accident_df[['LICENCE_STATE', 'SEATING_POSITION', 'HELMET_BELT_WORN', 'SURFACE_C
 
 # LICENCE_STATE (see line 50)
 '''if a person involved in the accident is a driver'''
-avg_licence_state = person_df.groupby('ACCIDENT_NO')['LICENCE_STATE'].apply(lambda x: 1 if (x > 0).any() else 0)
-accident_df['LICENCE_STATE'] = accident_df['ACCIDENT_NO'].map(avg_licence_state)
+licence_state = person_df.groupby('ACCIDENT_NO')['LICENCE_STATE'].apply(lambda x: 1 if (x > 0).any() else 0)
+accident_df['LICENCE_STATE'] = accident_df['ACCIDENT_NO'].map(licence_state)
 
 # SEATING_POSITION (see line 26)
 '''
-Seating position score = No. of front passengers - No. of rear passengers
+Seating position score:
+Front passenger: 2 (more weight to avoid skew)
+Rear Passenger: 1 (no. of passengers >= driver)
 Answer types:
 +ve: High severity
 ~0: Balanced
@@ -130,7 +137,7 @@ Finding overall severity of accident, not individual person injury severity
 Given that all entries have resulted in an accident
 '''
 
-seating_position_score = person_df.groupby('ACCIDENT_NO')['SEATING_POSITION'].apply(lambda x: (x == 1).sum() - (x == 0).sum())
+seating_position_score = person_df.groupby('ACCIDENT_NO')['SEATING_POSITION'].sum()
 accident_df['SEATING_POSITION'] = accident_df['ACCIDENT_NO'].map(seating_position_score)
 
 # HELMET_BELT_WORN (see line 38)
@@ -160,6 +167,7 @@ accident_df['ATMOSPH_COND'] = accident_df['ACCIDENT_NO'].map(mode_atmosph_cond)
 accident_df['ATMOSPH_COND'].replace(9, 0, inplace=True) 
 accident_df['ATMOSPH_COND'].fillna(-1, inplace=True)
 
+
 '''
 Fill in missing values in such a way that the values filled in maintain
 the original proportion of non-missing values.
@@ -178,12 +186,8 @@ def proportional_imputation(df, column):
     df.loc[df[column] == -1, column] = replacements
 
 # apply the custom method
-proportional_imputation(accident_df, 'LIGHT_CONDITION')
-proportional_imputation(accident_df, 'SEVERITY')
 proportional_imputation(accident_df, 'SPEED_ZONE')
 proportional_imputation(accident_df, 'ROAD_GEOMETRY')
-proportional_imputation(accident_df, 'NO_PERSONS_NOT_INJ')
-proportional_imputation(accident_df, 'LICENCE_STATE')
 proportional_imputation(accident_df, 'SEATING_POSITION')
 proportional_imputation(accident_df, 'HELMET_BELT_WORN')
 
@@ -196,8 +200,40 @@ accident_df.drop(columns=['SURFACE_COND', 'ATMOSPH_COND'], inplace=True)
 proportional_imputation(surface_atmosph_df, 'SURFACE_COND')
 proportional_imputation(surface_atmosph_df, 'ATMOSPH_COND')
 
-num_rows = accident_df.shape[0]
+accident_df_copy = accident_df.copy()
 
-print("Number of rows:", num_rows)
 
-# accident_df.to_csv("accident_processed.csv", index=False)
+
+norm_cols = ['LIGHT_CONDITION', 'SEVERITY', 'SPEED_ZONE', 'ROAD_GEOMETRY', 'NO_PERSONS_NOT_INJ', 'SEATING_POSITION']
+
+
+normalised_accident_df = pd.DataFrame(
+    MinMaxScaler().fit_transform(accident_df_copy[norm_cols]),
+    columns=norm_cols
+)
+
+normalised_accident_df.insert(0, 'ACCIDENT_NO', accident_df['ACCIDENT_NO'].values)
+
+'''
+normalised_accident_df['HELMET_BELT_WORN'] = accident_df['HELMET_BELT_WORN']
+normalised_accident_df['LICENCE_STATE'] = accident_df['LICENCE_STATE']
+'''
+
+# NO_OF_VEHICLES
+accident_df['NO_OF_VEHICLES'] = accident['NO_OF_VEHICLES']
+
+# normalised_accident_df['NO_OF_VEHICLES'] = accident_df['NO_OF_VEHICLES']
+
+# TAKEN_HOSPITAL
+# normalised_accident_df['TAKEN_HOSPITAL'] = accident_df['TAKEN_HOSPITAL'] 
+
+# print(normalised_accident_df.head(50))
+
+# print(accident_df.head(50))
+accident_df.to_csv("accident_processed.csv", index=False)
+
+'''
+add:
+1. NO_OF_VEHICLES
+
+'''
