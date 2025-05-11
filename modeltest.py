@@ -17,68 +17,69 @@ from sklearn.metrics import make_scorer
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier
 
-from sklearn.linear_model import LinearRegression
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import RandomForestRegressor
-
 from sklearn.model_selection import RandomizedSearchCV
 
 # print the table that we want to a .csv file
 def custom_compare_models(df):
-    # Scaling?
-    
-    train_X = df.drop("SEVERITY", axis=1) # !reminder, classification and regression models take different SEVERITY colums
-    train_Y = df["SEVERITY"].copy()
-
+        
+    cpy = df.copy().drop("SEVERITY", axis=1) # remove SEVERITY column
+    cpy = cpy.drop('ACCIDENT_NO', axis=1) # remove ACCIDENT_NO column
     # Divide into variations !!!!!!!!!!!!!! CHANGE IN THE FUTUTURE BASED ON CORRELATION ANALYSIS !!!!!!!!!!!!!!!
-    external_cols = ['SURFACE_COND', 'ATMOSPH_COND', 'LIGHT_CONDITION', 'SPEED_ZONE', 'ROAD_GEOMETRY']
-    internal_cols = ['SEATING_POSITION', 'HELMENT_BELT_WORN', 'LICENCE_STATE']
-    all_cols = list(train_X.columns)
-    
+    external_cols = ['LIGHT_CONDITION', 'SPEED_ZONE', 'ROAD_GEOMETRY', 'NO_PERSONS_NOT_INJ', 'SURFACE_COND', 'ATMOSPH_COND','NO_OF_VEHICLES']
+    internal_cols = ['LICENCE_STATE', 'SEATING_POSITION', 'HELMET_BELT_WORN']
+    all_cols = list(cpy.columns)
+
     variations = {
         0: {
-            "name": "Prediction based on external factors",
+            "name": "external",
             "columns": external_cols
         },
         1: {
-            "name": "Prediction based on internal factors",
+            "name": "internal",
             "columns": internal_cols
         },
         2: {
-            "name": "Prediction based on both external and internal factors",
+            "name": "all",
             "columns": all_cols
         }
     }
 
     compare_classification_models(df, variations)
-    compare_regression_models(df, variations)
 
 
 # Takes a dataframe with all x values, but y values with labels only
 # Print comparison to a csv file
 def compare_classification_models(df, variations):
 
-    file_path = 'classification.csv'
-
     # Evaluate if the data is balanced or imbalanced
-    balanced = is_balanced(df["SEVERITY_LABEL"])
+    balanced = is_balanced(df["SEVERITY"])
+    # balanced = True 
     
     # Splitting into train set and test set
     split = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)  # Provides train/test indices to split data in train/test sets.
-    for train_index, test_index in split.split(df, df["SEVERITY_LABEL"]):
+    for train_index, test_index in split.split(df, df["SEVERITY"]):
         train_set = df.loc[train_index]
         test_set = df.loc[test_index]
-    train_X = train_set.drop("SEVERITY_LABEL", axis=1) # not sure if i have to drop them or not, will inspect once i have data on hands
-    train_Y = train_set["SEVERITY_LABEL"].copy()
-    test_X = test_set.drop("SEVERITY_LABEL", axis=1)
-    test_Y = test_set["SEVERITY_LABEL"].copy()
+    train_X = train_set.drop("SEVERITY", axis=1)
+    train_Y = train_set["SEVERITY"].copy()
+    test_X = test_set.drop("SEVERITY", axis=1)
+    test_Y = test_set["SEVERITY"].copy()
 
-    ######### K-Nearest Neighbours #########
+    # K-Nearest Neighbours Classification
+    compare_knn(train_X, train_Y, test_X, test_Y, variations, balanced)
+
+    # Decision Tree Classification
+    compare_dt(train_X, train_Y, test_X, test_Y, variations, balanced)
+
+
+# K-Nearest Neighbours
+def compare_knn(train_X, train_Y, test_X, test_Y, variations, balanced):
+    file_path = 'knn.csv'
     knn_balanced_headers = ['k', 'Independent Variable Type', 'Accuracy']
     knn_imbalanced_headers = ['k', 'Independent Variable Type', 'Recall', 'Precision', 'F1-Score']
     
-    # Write to csv
-    with open(file_path, 'a') as file:
+    # Write headers to csv
+    with open(file_path, 'w') as file:
         file.write("K-Nearest Neighbours\n")
         if balanced:
             file.write(','.join(knn_balanced_headers))
@@ -87,39 +88,39 @@ def compare_classification_models(df, variations):
         file.write("\n")
 
     knn = KNeighborsClassifier()
-
     # Fine tune the n_neighbors=k hyperparameter    
-    for k in range(1, 11):
+    for k in range(5, 16):
         knn = KNeighborsClassifier(n_neighbors=k)
         # for each variation
         for i in range(0, 3):
             print(variations[i]['name']) # debug
             X_cols = train_X.copy()[variations[i]['columns']]
             knn.fit(X_cols, train_Y)
-            pred_y_knn = knn.predict(test_X)
+            pred_y_knn = knn.predict(test_X.copy()[variations[i]['columns']])
             if balanced:
                 accuracy_knn = balanced_evaluate(test_Y, pred_y_knn)
                 
                 # write to csv
                 with open(file_path, 'a') as file:
-                    file.write(','.join([k, variations[i]['name'], accuracy_knn]))
+                    file.write(','.join([str(k), variations[i]['name'], str(accuracy_knn)]))
                     file.write("\n")
             else:
                 recall_knn, precision_knn, f1_knn = imbalanced_evaluate(test_Y, pred_y_knn)
                 
                 # write to csv
                 with open(file_path, 'a') as file:
-                    file.write(','.join([k, variations[i]['name'], recall_knn, precision_knn, f1_knn]))
+                    file.write(','.join([str(k), variations[i]['name'], str(recall_knn), str(precision_knn), str(f1_knn)]))
                     file.write("\n")
 
     # if accuracy varies a lot between different n_neighbors=k values then the model is not robust
 
-    ######### Decision Tree Classification #########
+def compare_dt(train_X, train_Y, test_X, test_Y, variations, balanced):
+    file_path = 'dt.csv'
     dt_balanced_headers = ['Independent Variable Type', 'Accuracy']
     dt_imbalanced_headers = ['Independent Variable Type', 'Recall', 'Precision', 'F1-Score']
 
     # Write to csv
-    with open(file_path, 'a') as file:
+    with open(file_path, 'w') as file:
         file.write("Decision Tree Classification\n")
         if balanced:
             file.write(','.join(dt_balanced_headers))
@@ -127,116 +128,47 @@ def compare_classification_models(df, variations):
             file.write(','.join(dt_imbalanced_headers))
         file.write("\n")
 
-    train_Y = OrdinalEncoder().fit_transform(train_Y) # encoding is required for non-numerical data
+    train_Y.to_numpy().reshape(-1,1)
     dt = DecisionTreeClassifier(criterion='entropy')  # we specify entropy for IG
     # for each variation
     for i in range(0, 3):
         print(variations[i]['name'])
         X_cols = train_X.copy()[variations[i]['columns']]
         dt.fit(X_cols, train_Y)
-        pred_y_dt = dt.predict(test_X) # may need to encode/decode since we encoded train_Y?
+        pred_y_dt = dt.predict(test_X.copy()[variations[i]['columns']])
         if balanced:
             accuracy_dt = balanced_evaluate(test_Y, pred_y_dt)
 
             # write to csv
             with open(file_path, 'a') as file:
-                file.write(','.join([variations[i]['name'], accuracy_dt]))
+                file.write(','.join([variations[i]['name'], str(accuracy_dt)]))
                 file.write("\n")
         else:
             recall_dt, precision_dt, f1_dt = imbalanced_evaluate(test_Y, pred_y_dt)
 
             # write to csv
             with open(file_path, 'a') as file:
-                file.write(','.join([variations[i]['name'], recall_dt, precision_dt, f1_dt]))
+                file.write(','.join([variations[i]['name'], str(recall_dt), str(precision_dt), str(f1_dt)]))
                 file.write("\n")
 
 def is_balanced(col):
     max_diff = 0.05
-    col.value_counts(normalize=True) # normalize=True to get the frequency
-    for indx1 in col.index:
-        for indx2 in col.index:
-            diff = abs(col[indx1] - col[indx2])
+    freq = col.value_counts(normalize=True) # normalize=True to get the frequency
+    for indx1 in freq.index:
+        for indx2 in freq.index:
+            diff = abs(freq[indx1] - freq[indx2])
             if diff > max_diff:
-                return True
-    return False
+                return False
+    return True
 
 def balanced_evaluate(test_Y, pred_y):
     return round(accuracy_score(test_Y, pred_y), 2)
 
 def imbalanced_evaluate(test_Y, pred_y):
-    recall_dt = round(recall_score(test_Y, pred_y, average='weighted'),2)
-    precidion_dt = round(precision_score(test_Y, pred_y, average='weighted'),2)
+    recall_dt = round(recall_score(test_Y, pred_y, average='weighted', zero_division=1.0),2)
+    precidion_dt = round(precision_score(test_Y, pred_y, average='weighted', zero_division=1.0),2)
     f1_dt = round(f1_score(test_Y, pred_y,average='weighted'),2)
     return recall_dt, precidion_dt, f1_dt
 
-# Takes a dataframe with all x values, but numerical y values only
-def compare_regression_models(df, variations):
-    
-    file_path = 'regression.csv'
-    
-    train_X = df.drop("SEVERITY", axis=1) # !reminder, classification and regression models take different SEVERITY colums
-    train_Y = df["SEVERITY"].copy()
-
-    # Models Initialisation
-    lin_reg = LinearRegression()
-    tree_reg = DecisionTreeRegressor()
-    forest_reg = RandomForestRegressor()
-    
-    # Hyperparameters for fine tuning
-    models_configs = {
-        0 : {
-            "name": 'Linear Regressor',
-            "model": lin_reg,
-            "param_grid": {
-                "fit_intercept": [True],
-                "copy_X": [True]
-                }
-        },
-        1 : {
-            "name": "Decision Tree Regressor",
-            "model": tree_reg,
-            "param_grid": {
-                "criterion": ["gini", "entropy"], # ??????????
-                "max_depth": [3, None],
-                "min_samples_leaf": randint(1, 9),
-                "max_features": randint(1, 9)
-                }
-        },
-        2 : {
-            "name": "Random Forest Regressor",
-            "model": forest_reg,
-            "param_grid": {
-                'n_estimators': [130, 180, 230],
-                'max_depth': [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, None],
-                'min_samples_split': [2, 5, 10],
-                'min_samples_leaf': [1, 2, 4],
-                'max_features': ['auto', 'sqrt'],
-                'bootstrap': [True, False]
-                }
-        }
-    }
-    
-    # scorings = {'accuracy': make_scorer(accuracy_score),
-    #            'prec': 'precision'}
-
-    # Evaluation
-    # for each variation
-    for i in range(0, 3):
-        print(variations[i]['name'])
-        X_cols = train_X.copy()[variations[i]['columns']]
-        # for each model
-        for j in range(0, 3):
-            # Fine tuning
-            rand_search = RandomizedSearchCV(models_configs[j]["model"], models_configs[j]["param_grid"], cv=10,
-                                             scoring='neg_mean_squared_error', # forcing to negative to make it easier to sqrt
-                                             return_train_score=True)
-            rand_search.fit(X_cols, train_Y)
-
-            # print (hyperparameters, RMSE) of the best model
-            print(models_configs[j]["name"])
-            eval_res = pd.DataFrame(rand_search.cv_results_)
-            param_res = pd.DataFrame(rand_search.best_params_)
-            res_df = pd.concat([eval_res, param_res])
-            print(res_df.head())
-            # for mean_score, params in zip(eval_res["mean_test_score"], eval_res["params"]):
-            #     print(np.sqrt(-mean_score), params) # printing for now, change to writing to csv later
+df = pd.read_csv('accident_processed_new.csv')
+custom_compare_models(df)
