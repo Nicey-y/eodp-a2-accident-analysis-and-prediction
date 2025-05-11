@@ -24,9 +24,9 @@ def custom_compare_models(df):
         
     cpy = df.copy().drop("SEVERITY", axis=1) # remove SEVERITY column
     cpy = cpy.drop('ACCIDENT_NO', axis=1) # remove ACCIDENT_NO column
-    # Divide into variations !!!!!!!!!!!!!! CHANGE IN THE FUTUTURE BASED ON CORRELATION ANALYSIS !!!!!!!!!!!!!!!
-    external_cols = ['LIGHT_CONDITION', 'SPEED_ZONE', 'ROAD_GEOMETRY', 'NO_PERSONS_NOT_INJ', 'SURFACE_COND', 'ATMOSPH_COND','NO_OF_VEHICLES']
-    internal_cols = ['LICENCE_STATE', 'SEATING_POSITION', 'HELMET_BELT_WORN']
+    # Divide into two types of factors
+    external_cols = ['SPEED_ZONE','ROAD_GEOMETRY','NO_PERSONS_NOT_INJ','TAKEN_HOSPITAL','MEDIAN_AGE_GROUP','DAY_OF_WEEK','NO_OF_VEHICLES','AGG_LIGH_SURF_ATMOS_COND']
+    internal_cols = ['LICENCE_STATE','SEATING_POSITION','HELMET_BELT_WORN','NO_PERSONS']
     all_cols = list(cpy.columns)
 
     variations = {
@@ -66,7 +66,7 @@ def compare_classification_models(df, variations):
     test_Y = test_set["SEVERITY"].copy()
 
     # K-Nearest Neighbours Classification
-    compare_knn(train_X, train_Y, test_X, test_Y, variations, balanced)
+    # compare_knn(train_X, train_Y, test_X, test_Y, variations, balanced)
 
     # Decision Tree Classification
     compare_dt(train_X, train_Y, test_X, test_Y, variations, balanced)
@@ -170,5 +170,5 @@ def imbalanced_evaluate(test_Y, pred_y):
     f1_dt = round(f1_score(test_Y, pred_y,average='weighted'),2)
     return recall_dt, precidion_dt, f1_dt
 
-df = pd.read_csv('accident_processed_new.csv')
+df = pd.read_csv('accident_processed_new(3).csv')
 custom_compare_models(df)
